@@ -2,10 +2,11 @@ use iced::advanced::Shell;
 use iced::event::Status;
 use iced::mouse;
 use iced::mouse::Cursor;
-use iced::widget::shader::wgpu;
-use iced::widget::shader::Event;
-use iced::widget::{column, row, shader, slider, text};
-use iced::{Alignment, Element, Length, Rectangle, Sandbox, Settings, Size};
+use iced::wgpu;
+use iced::event::Event;
+use iced::widget::shader::Viewport;
+use iced::widget::{column, row, shader, slider, text, Action};
+use iced::{Alignment, Element, Length, Rectangle, Settings, Size};
 use image::io::Reader as ImageReader;
 use std::env;
 use std::path::Path;
@@ -172,22 +173,25 @@ impl FragmentShaderPipeline {
             })),
             vertex: wgpu::VertexState {
                 module: &vertex_shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &fragment_shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             multiview: None,
+            cache: None,
         });
 
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -303,13 +307,12 @@ impl FragmentShaderPrimitive {
 impl shader::Primitive for FragmentShaderPrimitive {
     fn prepare(
         &self,
-        format: wgpu::TextureFormat,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        _bounds: Rectangle,
-        target_size: Size<u32>,
-        _scale_factor: f32,
+        format: wgpu::TextureFormat,
         storage: &mut shader::Storage,
+        _bounds: &Rectangle,
+        viewport: &Viewport,
     ) {
         if !storage.has::<FragmentShaderPipeline>() {
             storage.store(FragmentShaderPipeline::new(device, queue, format));
@@ -320,7 +323,7 @@ impl shader::Primitive for FragmentShaderPrimitive {
         pipeline.update(
             queue,
             &Uniforms {
-                resolution: [target_size.width as f32, target_size.height as f32],
+                resolution: [viewport.physical_size().width as f32, viewport.physical_size().height as f32],
                 center: self.controls.center,
                 scale: [self.controls.scale(), 0.0],
             },
@@ -329,14 +332,13 @@ impl shader::Primitive for FragmentShaderPrimitive {
 
     fn render(
         &self,
+        encoder: &mut wgpu::CommandEncoder,
         storage: &shader::Storage,
         target: &wgpu::TextureView,
-        _target_size: Size<u32>,
-        viewport: Rectangle<u32>,
-        encoder: &mut wgpu::CommandEncoder,
+        clip_bounds: &Rectangle<u32>,
     ) {
         let pipeline = storage.get::<FragmentShaderPipeline>().unwrap();
-        pipeline.render(target, encoder, viewport);
+        pipeline.render(target, encoder, *clip_bounds);
     }
 }
 
@@ -381,55 +383,6 @@ impl shader::Program<Message> for FragmentShaderProgram {
     ) -> Self::Primitive {
         FragmentShaderPrimitive::new(self.controls)
     }
-
-    fn update(
-        &self,
-        state: &mut Self::State,
-        event: Event,
-        bounds: Rectangle,
-        cursor: Cursor,
-        _shell: &mut Shell<'_, Message>,
-    ) -> (Status, Option<Message>) {
-        if let Event::Mouse(mouse::Event::WheelScrolled { delta }) = event {
-            if let Some(pos) = cursor.position_in(bounds) {
-                let pos = [pos.x, pos.y];
-                let delta = match delta {
-                    mouse::ScrollDelta::Lines { x: _, y } => y,
-                    mouse::ScrollDelta::Pixels { x: _, y } => y,
-                };
-                return (
-                    Status::Captured,
-                    Some(Message::ZoomDelta(pos, bounds, delta)),
-                );
-            }
-        }
-
-        match state {
-            MouseInteraction::Idle => match event {
-                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                    if let Some(pos) = cursor.position_over(bounds) {
-                        *state = MouseInteraction::Panning([pos.x, pos.y]);
-                        return (Status::Captured, None);
-                    }
-                }
-                _ => {}
-            },
-            MouseInteraction::Panning(prev_pos) => match event {
-                Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                    *state = MouseInteraction::Idle;
-                }
-                Event::Mouse(mouse::Event::CursorMoved { position }) => {
-                    let pos = [position.x, position.y];
-                    let delta = [pos[0] - prev_pos[0], pos[1] - prev_pos[1]];
-                    *state = MouseInteraction::Panning(pos);
-                    return (Status::Captured, Some(Message::PanningDelta(delta)));
-                }
-                _ => {}
-            },
-        };
-
-        (Status::Ignored, None)
-    }
 }
 
 struct FragmentShaderApp {
@@ -443,8 +396,7 @@ fn control<'a>(
     row![text(label), control.into()].spacing(10).into()
 }
 
-impl Sandbox for FragmentShaderApp {
-    type Message = Message;
+impl FragmentShaderApp {
 
     fn new() -> Self {
         Self {
@@ -489,6 +441,17 @@ impl Sandbox for FragmentShaderApp {
     }
 }
 
+impl Default for FragmentShaderApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn main() -> iced::Result {
-    FragmentShaderApp::run(Settings::default())
+
+    iced::application(
+        "ImageViewer",
+        FragmentShaderApp::update,
+        FragmentShaderApp::view,
+    ).run()
 }
