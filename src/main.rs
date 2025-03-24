@@ -1,44 +1,22 @@
-use iced::advanced::Shell;
-use iced::event::Status;
+
 use iced::mouse;
-use iced::mouse::Cursor;
 use iced::wgpu;
-use iced::event::Event;
 use iced::widget::shader::Viewport;
-use iced::widget::{column, row, shader, slider, text, Action};
-use iced::{Alignment, Element, Length, Rectangle, Settings, Size};
+use iced::widget::shader;
+use iced::{Element, Length, Rectangle};
 use image::io::Reader as ImageReader;
-use std::env;
-use std::path::Path;
-use std::path::PathBuf;
 
-const ZOOM_MIN: f32 = 1.0;
-const ZOOM_DEFAULT: f32 = 1.0;
-const ZOOM_MAX: f32 = 17.0;
-
-const ZOOM_PIXELS_FACTOR: f32 = 200.0;
-const ZOOM_WHEEL_SCALE: f32 = 0.2;
-
-const ITERS_MIN: u32 = 20;
-const ITERS_DEFAULT: u32 = 20;
-const ITERS_MAX: u32 = 200;
-
-const CENTER_DEFAULT: [f32; 2] = [0.0, 0.0];
 
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct Uniforms {
     resolution: [f32; 2],
-    center: [f32; 2],
-    scale: [f32; 2],
 }
 
 impl Default for Uniforms {
     fn default() -> Self {
         Self {
             resolution: [0.0, 0.0],
-            center: [0.0, 0.0],
-            scale: [0.0, 0.0],
         }
     }
 }
@@ -205,14 +183,14 @@ impl FragmentShaderPipeline {
 
         // Upload image data
         queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             &img,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
                 rows_per_image: Some(dimensions.1),
@@ -270,39 +248,14 @@ impl FragmentShaderPipeline {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Controls {
-    max_iter: u32,
-    zoom: f32,
-    center: [f32; 2],
-}
 
-impl Controls {
-    fn scale(&self) -> f32 {
-        1.0 / 2.0_f32.powf(self.zoom) / ZOOM_PIXELS_FACTOR
-    }
-}
-
-impl Default for Controls {
-    fn default() -> Self {
-        Self {
-            max_iter: ITERS_DEFAULT,
-            zoom: ZOOM_DEFAULT,
-            center: CENTER_DEFAULT,
-        }
-    }
-}
 
 #[derive(Debug)]
 struct FragmentShaderPrimitive {
-    controls: Controls,
+
 }
 
-impl FragmentShaderPrimitive {
-    fn new(controls: Controls) -> Self {
-        Self { controls }
-    }
-}
+
 
 impl shader::Primitive for FragmentShaderPrimitive {
     fn prepare(
@@ -324,8 +277,6 @@ impl shader::Primitive for FragmentShaderPrimitive {
             queue,
             &Uniforms {
                 resolution: [viewport.physical_size().width as f32, viewport.physical_size().height as f32],
-                center: self.controls.center,
-                scale: [self.controls.scale(), 0.0],
             },
         );
     }
@@ -344,13 +295,11 @@ impl shader::Primitive for FragmentShaderPrimitive {
 
 #[derive(Debug, Clone)]
 enum Message {
-    PanningDelta([f32; 2]),
-    ZoomDelta([f32; 2], Rectangle, f32),
+
 }
 
 enum MouseInteraction {
     Idle,
-    Panning([f32; 2]),
 }
 
 impl Default for MouseInteraction {
@@ -360,13 +309,11 @@ impl Default for MouseInteraction {
 }
 
 struct FragmentShaderProgram {
-    controls: Controls,
 }
 
 impl FragmentShaderProgram {
     fn new() -> Self {
         Self {
-            controls: Controls::default(),
         }
     }
 }
@@ -381,19 +328,12 @@ impl shader::Program<Message> for FragmentShaderProgram {
         _cursor: mouse::Cursor,
         _bounds: Rectangle,
     ) -> Self::Primitive {
-        FragmentShaderPrimitive::new(self.controls)
+        FragmentShaderPrimitive {}
     }
 }
 
 struct FragmentShaderApp {
     program: FragmentShaderProgram,
-}
-
-fn control<'a>(
-    label: &'static str,
-    control: impl Into<Element<'a, Message>>,
-) -> Element<'a, Message> {
-    row![text(label), control.into()].spacing(10).into()
 }
 
 impl FragmentShaderApp {
@@ -404,9 +344,6 @@ impl FragmentShaderApp {
         }
     }
 
-    fn title(&self) -> String {
-        String::from("Fragment Shader Widget - Iced")
-    }
 
     fn view(&self) -> Element<'_, Message> {
         let shader = shader(&self.program)
@@ -416,28 +353,8 @@ impl FragmentShaderApp {
         shader.into()
     }
 
-    fn update(&mut self, message: Message) {
-        match message {
-            Message::PanningDelta(delta) => {
-                let scale = self.program.controls.scale();
-                self.program.controls.center[0] -= 2.0 * delta[0] * scale;
-                self.program.controls.center[1] -= 2.0 * delta[1] * scale;
-            }
-            Message::ZoomDelta(pos, bounds, delta) => {
-                let delta = delta * ZOOM_WHEEL_SCALE;
-                let prev_scale = self.program.controls.scale();
-                let prev_zoom = self.program.controls.zoom;
-                self.program.controls.zoom = (prev_zoom + delta).max(ZOOM_MIN).min(ZOOM_MAX);
-
-                let vec = [
-                    pos[0] - bounds.width as f32 * 0.5,
-                    pos[1] - bounds.height as f32 * 0.5,
-                ];
-                let new_scale = self.program.controls.scale();
-                self.program.controls.center[0] += vec[0] * (prev_scale - new_scale) * 2.0;
-                self.program.controls.center[1] += vec[1] * (prev_scale - new_scale) * 2.0;
-            }
-        }
+    fn update(&mut self, _message: Message) {
+    
     }
 }
 

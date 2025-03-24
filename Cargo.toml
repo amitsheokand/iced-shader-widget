@@ -4,12 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-iced = { git = "https://github.com/iced-rs/iced.git", branch = "master", features = [
-    "image", "wgpu", "tiny-skia", "advanced",
-]}
-
-web-sys = "0.3.74"
-
+iced = { git = "https://github.com/iced-rs/iced.git", branch = "master"}
 bytemuck = "1.15.0"
-glam = { version="0.27.0", features=[ "bytemuck" ] }
 image = "0.24"
