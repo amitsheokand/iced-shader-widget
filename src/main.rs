@@ -1,4 +1,3 @@
-
 use iced::mouse;
 use iced::wgpu;
 use iced::widget::shader::Viewport;
@@ -25,6 +24,7 @@ struct FragmentShaderPipeline {
     pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    #[allow(dead_code)]
     texture: wgpu::Texture,
     texture_bind_group: wgpu::BindGroup,
 }
