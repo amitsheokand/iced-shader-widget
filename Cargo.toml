@@ -1,9 +1,17 @@
 [package]
 name = "iced-shader-widget"
 version = "0.1.0"
+authors = ["Amit Sheokand <amix.sheokand@gmail.com>"]
 edition = "2024"
 
 [dependencies]
-iced = { git = "https://github.com/iced-rs/iced.git", branch = "master"}
-bytemuck = "1.15.0"
-image = "0.24"
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "4b075b9731f4658a885357024cc77dee10e223c3", features = [
+    "debug",
+    "image",
+    "advanced",
+] }
+
+image = "0.25.6"
+bytemuck = "1.13.1"
+
+rfd = "0.15.3"
